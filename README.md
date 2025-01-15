@@ -83,6 +83,7 @@ Just My Socks 是搬瓦工提供的 Shadowsocks & V2Ray 服务，不怕跑路，
 执行如下命令：
 
 bash <(wget -qO- -o- https://github.com/233boy/sing-box/raw/main/install.sh)
+
 如果需要指定 sing-box 版本，请在安装命令后面加 -v ver 参数
 
 如需查看安装命令帮助，在安装命令后面加 -h 即可
