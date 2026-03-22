@@ -58,8 +58,8 @@ _wget() {
     wget --no-check-certificate "$@"
 }
 
-# apt-get, yum or zypper
-cmd=$(type -P apt-get || type -P yum || type -P zypper)
+# apt-get, yum, zypper or apk
+cmd=$(type -P apt-get || type -P yum || type -P zypper || type -P apk)
 
 # x64
 case $(uname -m) in
@@ -84,14 +84,20 @@ is_log_dir=/var/log/$is_core
 is_sh_bin=/usr/local/bin/$is_core
 is_sh_dir=$is_core_dir/sh
 is_sh_repo=$author/$is_core
-is_pkg="wget unzip tar qrencode"
+is_pkg="wget unzip tar qrencode bash"
 is_config_json=$is_core_dir/config.json
 is_caddy_bin=/usr/local/bin/caddy
 is_caddy_dir=/etc/caddy
 is_caddy_repo=caddyserver/caddy
 is_caddyfile=$is_caddy_dir/Caddyfile
 is_caddy_conf=$is_caddy_dir/$author
-is_caddy_service=$(systemctl list-units --full -all | grep caddy.service)
+is_systemd=$(type -P systemctl)
+is_openrc=$(type -P rc-service)
+if [[ $is_systemd ]]; then
+    is_caddy_service=$(systemctl list-units --full -all | grep caddy.service)
+elif [[ $is_openrc ]]; then
+    [[ -f /etc/init.d/caddy ]] && is_caddy_service=1
+fi
 is_http_port=80
 is_https_port=443
 
@@ -109,7 +115,7 @@ is_tls_key=$is_core_dir/bin/tls.key
     rm $is_tls_tmp
 }
 
-if [[ $(pgrep -f $is_core_bin) ]]; then
+if [[ $(pgrep -f $is_core_bin 2>/dev/null || grep -l "$is_core_bin" /proc/*/cmdline 2>/dev/null) ]]; then
     is_core_status=$(_green running)
 else
     is_core_status=$(_red_bg stopped)
@@ -117,18 +123,19 @@ else
 fi
 if [[ -f $is_caddy_bin && -d $is_caddy_dir && $is_caddy_service ]]; then
     is_caddy=1
-    # fix caddy run; ver >= 2.8.2
-    [[ ! $(grep '\-\-adapter caddyfile' /lib/systemd/system/caddy.service) ]] && {
-        load systemd.sh
-        install_service caddy
-        systemctl restart caddy &
-    }
+    if [[ $is_systemd ]]; then
+        [[ -f /lib/systemd/system/caddy.service && ! $(grep '\-\-adapter caddyfile' /lib/systemd/system/caddy.service) ]] && {
+            load systemd.sh
+            install_service caddy
+            systemctl restart caddy &
+        }
+    fi
     is_caddy_ver=$($is_caddy_bin version | head -n1 | cut -d " " -f1)
     is_tmp_http_port=$(grep -E '^ {2,}http_port|^http_port' $is_caddyfile | grep -E -o [0-9]+)
     is_tmp_https_port=$(grep -E '^ {2,}https_port|^https_port' $is_caddyfile | grep -E -o [0-9]+)
     [[ $is_tmp_http_port ]] && is_http_port=$is_tmp_http_port
     [[ $is_tmp_https_port ]] && is_https_port=$is_tmp_https_port
-    if [[ $(pgrep -f $is_caddy_bin) ]]; then
+    if [[ $(pgrep -f $is_caddy_bin 2>/dev/null || grep -l "$is_caddy_bin" /proc/*/cmdline 2>/dev/null) ]]; then
         is_caddy_status=$(_green running)
     else
         is_caddy_status=$(_red_bg stopped)

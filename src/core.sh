@@ -92,6 +92,20 @@ servername_list=(
     aws.amazon.com
 )
 
+# shuf fallback for systems without shuf (e.g., Alpine BusyBox)
+if ! type -P shuf &>/dev/null; then
+    shuf() {
+        local min max n
+        while [[ $# -gt 0 ]]; do
+            case $1 in
+            -i) IFS=- read min max <<<"$2"; shift 2 ;;
+            -n) n=$2; shift 2 ;;
+            esac
+        done
+        echo $(( RANDOM % (max - min + 1) + min ))
+    }
+fi
+
 is_random_ss_method=${ss_method_list[$(shuf -i 4-6 -n1)]} # random only use ss2022
 is_random_servername=${servername_list[$(shuf -i 0-${#servername_list[@]} -n1) - 1]}
 
@@ -679,13 +693,22 @@ uninstall() {
     fi
     manage stop &>/dev/null
     manage disable &>/dev/null
-    rm -rf $is_core_dir $is_log_dir $is_sh_bin ${is_sh_bin/$is_core/sb} /lib/systemd/system/$is_core.service
+    rm -rf $is_core_dir $is_log_dir $is_sh_bin ${is_sh_bin/$is_core/sb}
+    if [[ $is_systemd ]]; then
+        rm -f /lib/systemd/system/$is_core.service
+    elif [[ $is_openrc ]]; then
+        rm -f /etc/init.d/$is_core
+    fi
     sed -i "/$is_core/d" /root/.bashrc
     # uninstall caddy; 2 is ask result
     if [[ $REPLY == '2' ]]; then
         manage stop caddy &>/dev/null
         manage disable caddy &>/dev/null
-        rm -rf $is_caddy_dir $is_caddy_bin /lib/systemd/system/caddy.service
+        if [[ $is_systemd ]]; then
+            rm -rf $is_caddy_dir $is_caddy_bin /lib/systemd/system/caddy.service
+        elif [[ $is_openrc ]]; then
+            rm -rf $is_caddy_dir $is_caddy_bin /etc/init.d/caddy
+        fi
     fi
     [[ $is_install_sh ]] && return # reinstall
     _green "\n卸载完成!"
@@ -728,10 +751,24 @@ manage() {
         is_do_name_msg=$is_core_name
         ;;
     esac
-    systemctl $is_do $is_do_name
+    if [[ $is_systemd ]]; then
+        systemctl $is_do $is_do_name 2>/dev/null
+    elif [[ $is_openrc ]]; then
+        case $is_do in
+        enable)
+            rc-update add $is_do_name default 2>/dev/null
+            ;;
+        disable)
+            rc-update del $is_do_name default 2>/dev/null
+            ;;
+        *)
+            rc-service $is_do_name $is_do 2>/dev/null
+            ;;
+        esac
+    fi
     [[ $is_test_run && ! $is_new_install ]] && {
         sleep 2
-        if [[ ! $(pgrep -f $is_run_bin) ]]; then
+        if [[ ! $(pgrep -f $is_run_bin 2>/dev/null || grep -l "$is_run_bin" /proc/*/cmdline 2>/dev/null) ]]; then
             is_run_fail=${is_do_name_msg,,}
             [[ ! $is_no_manage_msg ]] && {
                 msg
@@ -1228,13 +1265,15 @@ get() {
         bash <<<$is_install_sh
         ;;
     test-run)
-        systemctl list-units --full -all &>/dev/null
-        [[ $? != 0 ]] && {
-            _yellow "\n无法执行测试, 请检查 systemctl 状态.\n"
-            return
-        }
+        if [[ $is_systemd ]]; then
+            systemctl list-units --full -all &>/dev/null
+            [[ $? != 0 ]] && {
+                _yellow "\n无法执行测试, 请检查 systemctl 状态.\n"
+                return
+            }
+        fi
         is_no_manage_msg=1
-        if [[ ! $(pgrep -f $is_core_bin) ]]; then
+        if [[ ! $(pgrep -f $is_core_bin 2>/dev/null || grep -l "$is_core_bin" /proc/*/cmdline 2>/dev/null) ]]; then
             _yellow "\n测试运行 $is_core_name ..\n"
             manage start &>/dev/null
             if [[ $is_run_fail == $is_core ]]; then
@@ -1247,7 +1286,7 @@ get() {
             _green "\n$is_core_name 正在运行, 跳过测试\n"
         fi
         if [[ $is_caddy ]]; then
-            if [[ ! $(pgrep -f $is_caddy_bin) ]]; then
+            if [[ ! $(pgrep -f $is_caddy_bin 2>/dev/null || grep -l "$is_caddy_bin" /proc/*/cmdline 2>/dev/null) ]]; then
                 _yellow "\n测试运行 Caddy ..\n"
                 manage start caddy &>/dev/null
                 if [[ $is_run_fail == 'caddy' ]]; then
