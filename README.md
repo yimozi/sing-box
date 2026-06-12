@@ -741,6 +741,7 @@ https://github.com/233boy/sing-box/issues
 - 一键添加 TUIC
 - 一键添加 Trojan
 - 一键添加 Hysteria2
+- 一键添加 AnyTLS
 - 一键添加 Shadowsocks 2022
 - 一键添加 VMess-(TCP/HTTP/QUIC)
 - 一键添加 VMess-(WS/H2/HTTPUpgrade)-TLS
@@ -799,7 +800,7 @@ Usage: sing-box [options]... [args]...
    port [name] [port | auto]                       更改端口
    path [name] [path | auto]                       更改路径
    passwd [name] [password | auto]                 更改密码
-   key [name] [Private key | atuo] [Public key]    更改密钥
+   key [name] [Private key | auto] [Public key]    更改密钥
    method [name] [method | auto]                   更改加密方式
    sni [name] [ ip | domain]                       更改 serverName
    new [name] [...]                                更改协议
